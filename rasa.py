@@ -1,12 +1,13 @@
 import streamlit as st
 import os
+import groq  # <--- Import groq to handle errors
+import pytz  # <--- NEW: Required for global timezones
 from dotenv import load_dotenv
 
-# --- 1. SETUP & CONFIGURATION (Load Env Vars FIRST) ---
-# This must happen before importing LangChain components for Tracing to work correctly.
+# --- 1. SETUP & CONFIGURATION ---
 load_dotenv()
 
-# Optional: verify tracing is active
+# Optional: verify tracing
 if os.getenv("LANGCHAIN_TRACING_V2") == "true":
     print("✅ LangSmith Tracing is ENABLED")
 
@@ -25,72 +26,66 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-# Set up the page configuration
 st.set_page_config(page_title="KrishnaAI Chatbot", layout="centered")
 
-# --- 2. DEFINE TOOLS & GRAPH (Cached for Performance) ---
+# --- 2. DEFINE TOOLS & GRAPH ---
 
 @tool
-def get_current_time():
-    """Returns the current local time."""
-    now = datetime.now()
-    return now.strftime("%Y-%m-%d %H:%M:%S")
+def get_world_time(timezone_str: str = "UTC"):
+    """
+    Get the current time for a specific timezone. 
+    The input should be a valid pytz timezone string (e.g., 'America/New_York', 'Asia/Kolkata', 'Europe/London').
+    If the user asks for a city, convert it to the correct timezone string first.
+    """
+    try:
+        # 1. Load the specific timezone
+        tz = pytz.timezone(timezone_str)
+        
+        # 2. Get current time in that zone
+        now = datetime.now(tz)
+        
+        # 3. Return a readable string
+        return now.strftime(f"%Y-%m-%d %I:%M:%S %p ({timezone_str})")
+        
+    except pytz.UnknownTimeZoneError:
+        return f"Error: '{timezone_str}' is not a valid timezone. Please try a standard format like 'Asia/Tokyo' or 'America/Chicago'."
 
 @tool
 def get_weather(city: str):
-    """
-    Get the current weather for a specific city using Open-Meteo API.
-    Args:
-        city: The name of the city (e.g., "London", "Dum Dum").
-    """
+    """Get current weather using Open-Meteo."""
     try:
-        # 1. Geocoding
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json"
         geo_response = requests.get(geo_url).json()
-        
         if not geo_response.get("results"):
             return f"Could not find coordinates for {city}."
-            
         location = geo_response["results"][0]
         lat, lon = location["latitude"], location["longitude"]
-        
-        # 2. Get Weather
         weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,wind_speed_10m&hourly=temperature_2m"
         weather_response = requests.get(weather_url).json()
-        
         current = weather_response.get("current", {})
         temp = current.get("temperature_2m", "N/A")
         wind = current.get("wind_speed_10m", "N/A")
-        
         return f"Current weather in {city} (Lat: {lat}, Lon: {lon}): {temp}°C, Wind Speed: {wind} km/h."
     except Exception as e:
         return f"Error fetching weather: {str(e)}"
 
 @st.cache_resource
 def get_graph():
-    """
-    Initializes the LangGraph.
-    st.cache_resource ensures we don't rebuild the graph on every rerun,
-    which is crucial for performance and connection stability.
-    """
-    # Check Critical API Keys
+    # Check Critical Keys
     if not os.getenv("GROQ_API_KEY"):
         st.error("🚨 GROQ_API_KEY is missing in .env")
         st.stop()
     if not os.getenv("TAVILY_API_KEY"):
         st.error("🚨 TAVILY_API_KEY is missing in .env")
         st.stop()
-        
-    # Check LangSmith Key (Optional warning)
-    if not os.getenv("LANGCHAIN_API_KEY"):
-        print("⚠️ LANGCHAIN_API_KEY not found. Tracing will not be recorded.")
 
-    # 1. Define Tools
-    tools = [TavilySearchResults(max_results=2), get_current_time, get_weather]
+    # 1. Define Tools (Updated to use get_world_time)
+    tools = [TavilySearchResults(max_results=2), get_world_time, get_weather]
 
-    # 2. Initialize LLM (Groq)
-    # Tracing happens automatically here because of the env vars
-    llm = init_chat_model('llama-3.3-70b-versatile', model_provider='groq', temperature=0)
+    # 2. Initialize LLM (Dynamic Model Name)
+    model_name = os.getenv("GROQ_MODEL_NAME", "llama3-8b-8192")
+    
+    llm = init_chat_model(model_name, model_provider='groq', temperature=0)
     llm_with_tools = llm.bind_tools(tools)
 
     # 3. Define State
@@ -105,25 +100,19 @@ def get_graph():
     graph_builder = StateGraph(State)
     graph_builder.add_node("chatbot", chatbot)
     graph_builder.add_node("tools", ToolNode(tools=tools))
-
     graph_builder.add_edge(START, "chatbot")
     graph_builder.add_conditional_edges("chatbot", tools_condition)
     graph_builder.add_edge("tools", "chatbot")
 
-    # 6. Compile with Memory
+    # 6. Compile
     memory = MemorySaver()
-    graph = graph_builder.compile(checkpointer=memory)
-    return graph
+    return graph_builder.compile(checkpointer=memory)
 
-# Load the graph
 graph = get_graph()
 
-# --- 3. SESSION STATE MANAGEMENT ---
-
+# --- 3. SESSION STATE ---
 if 'messages' not in st.session_state:
     st.session_state.messages = []
-
-# Unique Thread ID for this user session (Logs will be grouped by this ID in LangSmith)
 if 'thread_id' not in st.session_state:
     st.session_state.thread_id = str(uuid.uuid4())
 
@@ -131,11 +120,8 @@ if 'thread_id' not in st.session_state:
 st.markdown(
     """
     <style>
-        /* Dark Theme & Layout */
         body { background-color:rgb(1, 1, 1); color: white; font-family: 'Arial', sans-serif; }
         .stApp { background-color:rgb(1, 1, 1); }
-        
-        /* Fixed Headers */
         .fixed-top-left {
             position: fixed; top: 10px; left: 10px; font-size: 14px; font-weight: bold;
             color: white; background-color:rgb(0, 0, 0); padding: 5px 10px;
@@ -146,17 +132,12 @@ st.markdown(
             font-size: 12px; color: white; background-color:rgb(0, 0, 0);
             padding: 5px 10px; border-radius: 5px; z-index: 1000;
         }
-
-        /* Chat Bubbles */
         .message-box { padding: 15px; border-radius: 10px; margin: 10px 0; }
         .user-message { background-color:rgb(20, 20, 20); text-align: right; border: 1px solid #333; }
         .ai-message { background-color: #333; text-align: left; }
-        
-        /* Input Styling */
         .stTextInput input { background-color: #222; color: white; border: 1px solid #444; }
     </style>
-
-    <div class="fixed-top-left">Krishna AI (LangSmith Tracing Active)</div>
+    <div class="fixed-top-left">Krishna AI (LangSmith Active)</div>
     <div class="fixed-bottom">Made with ❤️ from Sohan</div>
     """,
     unsafe_allow_html=True
@@ -165,37 +146,33 @@ st.markdown(
 st.markdown("<h1 style='text-align: center;'>What can I help with?</h1>", unsafe_allow_html=True)
 
 # --- 5. CHAT LOGIC ---
-
-# Render Chat History
 chat_container = st.container()
 with chat_container:
     for message in st.session_state.messages:
         role_class = "user-message" if message["role"] == "user" else "ai-message"
         st.markdown(f"<div class='message-box {role_class}'>{message['content']}</div>", unsafe_allow_html=True)
 
-# Input Handling
 with st.form(key='chat_form', clear_on_submit=True):
     user_input = st.text_input("", placeholder="Ask me anything...", key="chat_input_form", label_visibility="collapsed")
     submitted = st.form_submit_button("Send")
 
     if submitted and user_input:
-        # Add User Message
         st.session_state.messages.append({"role": "user", "content": user_input})
         
         with st.spinner("AI is thinking..."):
-            # Prepare Config with Thread ID
-            # This ID will appear in LangSmith, allowing you to filter traces by specific user sessions
             config = {"configurable": {"thread_id": st.session_state.thread_id}}
             
-            # Invoke Graph
-            # All internal steps (Tool calls, LLM thoughts) are automatically sent to LangSmith
-            response_state = graph.invoke(
-                {"messages": [("user", user_input)]}, 
-                config
-            )
-            
-            final_response = response_state["messages"][-1].content
-            
-        # Add AI Message
-        st.session_state.messages.append({"role": "AI", "content": final_response})
-        st.rerun()
+            try:
+                # --- EXECUTION WITH ERROR HANDLING ---
+                response_state = graph.invoke(
+                    {"messages": [("user", user_input)]}, 
+                    config
+                )
+                final_response = response_state["messages"][-1].content
+                st.session_state.messages.append({"role": "AI", "content": final_response})
+                st.rerun()
+
+            except groq.RateLimitError:
+                st.error("⏳ Rate Limit Hit! Please wait a moment or switch to the 8b model in .env.")
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
