@@ -83,7 +83,7 @@ def get_graph():
     tools = [TavilySearchResults(max_results=2), get_world_time, get_weather]
 
     # 2. Initialize LLM (Dynamic Model Name)
-    model_name = os.getenv("GROQ_MODEL_NAME", "llama3-8b-8192")
+    model_name = os.getenv("GROQ_MODEL_NAME")
     
     llm = init_chat_model(model_name, model_provider='groq', temperature=0)
     llm_with_tools = llm.bind_tools(tools)
