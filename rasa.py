@@ -182,7 +182,7 @@ with st.form(key='chat_form', clear_on_submit=True):
         # Add User Message
         st.session_state.messages.append({"role": "user", "content": user_input})
         
-        with st.spinner("KrishnaAI is thinking..."):
+        with st.spinner("AI is thinking..."):
             # Prepare Config with Thread ID
             # This ID will appear in LangSmith, allowing you to filter traces by specific user sessions
             config = {"configurable": {"thread_id": st.session_state.thread_id}}
