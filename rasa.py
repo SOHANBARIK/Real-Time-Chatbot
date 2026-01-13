@@ -134,8 +134,8 @@ st.markdown(
         }
         .message-box { padding: 15px; border-radius: 10px; margin: 10px 0; }
         .user-message { background-color:rgb(153, 150, 242); text-align: right; border: 1px solid #ffffff; color: black; }
-        .ai-message { background-color: #ffffff; text-align: left; }
-        .stTextInput input { background-color: #222; color: white; border: 1px solid #444; }
+        .ai-message { background-color: #ffffff; text-align: left; color: black; border: 1px solid #ffffff; }
+        .stTextInput input { background-color: #ffffff; color: black; border: 1px solid #444; }
     </style>
     <div class="fixed-top-left">AI Chatbot (LangSmith Active)</div>
     <div class="fixed-bottom">Made with ❤️ from Sohan</div>
