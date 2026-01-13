@@ -26,7 +26,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-st.set_page_config(page_title="KrishnaAI Chatbot", layout="centered")
+st.set_page_config(page_title="AI Chatbot", layout="centered")
 
 # --- 2. DEFINE TOOLS & GRAPH ---
 
@@ -133,17 +133,17 @@ st.markdown(
             padding: 5px 10px; border-radius: 5px; z-index: 1000;
         }
         .message-box { padding: 15px; border-radius: 10px; margin: 10px 0; }
-        .user-message { background-color:rgb(20, 20, 20); text-align: right; border: 1px solid #333; }
-        .ai-message { background-color: #333; text-align: left; }
+        .user-message { background-color:rgb(153, 150, 242); text-align: right; border: 1px solid #ffffff; color: black; }
+        .ai-message { background-color: #ffffff; text-align: left; }
         .stTextInput input { background-color: #222; color: white; border: 1px solid #444; }
     </style>
-    <div class="fixed-top-left">Krishna AI (LangSmith Active)</div>
+    <div class="fixed-top-left">AI Chatbot (LangSmith Active)</div>
     <div class="fixed-bottom">Made with ❤️ from Sohan</div>
     """,
     unsafe_allow_html=True
 )
 
-st.markdown("<h1 style='text-align: center;'>What can I help with?</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: white;'>What can I help with?</h1>", unsafe_allow_html=True)
 
 # --- 5. CHAT LOGIC ---
 chat_container = st.container()
@@ -153,7 +153,7 @@ with chat_container:
         st.markdown(f"<div class='message-box {role_class}'>{message['content']}</div>", unsafe_allow_html=True)
 
 with st.form(key='chat_form', clear_on_submit=True):
-    user_input = st.text_input("", placeholder="Ask me anything...", key="chat_input_form", label_visibility="collapsed")
+    user_input = st.text_input("", placeholder="Ask me anything...", key="chat_input_form", label_visibility="visible")
     submitted = st.form_submit_button("Send")
 
     if submitted and user_input:
