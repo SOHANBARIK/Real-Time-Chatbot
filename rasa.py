@@ -27,7 +27,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
 st.set_page_config(page_title="AI Chatbot", layout="centered")
-
+st.header("It's a Real-time AI Chatbot with Current News, Time & Weather!")
 # --- 2. DEFINE TOOLS & GRAPH ---
 
 @tool
